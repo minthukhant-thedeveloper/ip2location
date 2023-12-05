@@ -1,0 +1,79 @@
+const { IP2Location } = require("ip2location-nodejs");
+const {LRUCache} = require("lru-cache");
+const express = require('express')
+const mongoose = require('mongoose');
+const MONGO_URL="mongodb+srv://mmvip:eXn7MsfiOyCjv7dy@cluster0.g3voequ.mongodb.net/ip2location"
+const tokenModel = require("./token-model.js");
+
+
+const app = express()
+const port = 3000
+app.use(express.json())
+const ip2location = new IP2Location();
+const cache = new LRUCache({max:500000})
+
+
+ip2location.open("./IP2LOCATION-LITE-DB1.BIN");
+
+main().catch(err => console.log(err));
+
+async function main() {
+  await mongoose.connect(MONGO_URL);
+  console.log('connected')
+}
+
+
+
+
+
+// Function to get geolocation data for an IP address
+function getGeolocation(ip) {
+  // Check if the data is already in the cache
+  if (cache[ip]) {
+    console.log("Data retrieved from cache");
+    return cache[ip];
+  }
+
+  // If not in the cache, read from the binary file
+  const data = ip2location.getAll(ip);
+
+  // Store the data in the cache
+  cache[ip] = {
+    countryShort: data.countryShort,
+  };
+
+  // Return the geolocation data
+  return cache[ip];
+}
+
+
+
+app.get('/', (req, res) => {
+	const ip = req.ip
+
+	try {
+		const result = getGeolocation(testIP);	
+		res.send(result)
+
+	} catch(error){
+		res.send(error)
+	}	
+})
+
+
+app.get('/auth', async (req, res)=>{
+  const token = req.query.token;
+  await tokenModel.create({token: token});
+  res.send("OK")
+})
+
+app.get('/tokens', async (req, res)=>{
+  const tokens = await tokenModel.find({}).sort({'_id': -1})
+
+  res.send(tokens)
+})
+
+
+app.listen(port, () => {
+  console.log(`Example app listening on port ${port}`)
+})
